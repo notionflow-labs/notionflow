@@ -56,6 +56,22 @@ test('Personal publishing uses the selected parent and visitor token, with no wr
   assert.equal(confirmed.status,200); assert.equal((await confirmed.json()).pageId,'created');
   assert.equal(calls.filter(c => c.options.method==='POST').length,1);
 });
+test('Loading personal pages uses the OAuth cookie without a preview code and exposes no token',async () => {
+  const e=env(),a=await connect(e,'own-pages-token');
+  const request=req('/api/notion/pages',a.cookie,{}); request.headers.delete('authorization');
+  const response=await worker.fetch(request,e,async (url,options) => {
+    assert.equal(url,'https://api.notion.com/v1/search');
+    assert.equal(options.headers.authorization,'Bearer own-pages-token');
+    return Response.json({results:[{id:'page',properties:{Name:{type:'title',title:[{plain_text:'My page'}]}}}],has_more:false});
+  });
+  assert.equal(response.status,200);
+  const data=await response.json(); assert.deepEqual(data,{pages:[{id:'page',title:'My page'}],cursor:null});
+  assert(!JSON.stringify(data).includes('own-pages-token'));
+  const anonymous=req('/api/notion/pages',null,{}); anonymous.headers.delete('authorization');
+  assert.equal((await worker.fetch(anonymous,e)).status,401);
+  const foreign=req('/api/notion/pages',a.cookie,{}); foreign.headers.set('origin','https://evil.example');
+  assert.equal((await worker.fetch(foreign,e)).status,403);
+});
 test('OAuth endpoints reject foreign origins, bad callback configuration and unauthorized page listing',async () => {
   const e=env();
   const foreign=new Request('https://preview.example/api/notion/connect',{method:'POST',headers:{origin:'https://evil.example',authorization:'Bearer access'}});

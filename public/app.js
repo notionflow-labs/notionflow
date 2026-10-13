@@ -143,7 +143,7 @@ async function init() {
   if(available.oauth) $('workspace').value='personal';
   try { await refreshConnection(); } catch { message('input-message','Could not check the Notion connection. Reload before publishing.',true); }
   const outcome=new URL(location.href).searchParams.get('notion');
-  if(outcome) { message('input-message',outcome==='connected' ? 'Notion connected. Enter your access code and load the shared pages.' : 'Notion connection cancelled.'); const clean=new URL(location.href); clean.searchParams.delete('notion'); history.replaceState(null,'',clean); }
+    if(outcome) { message('input-message',outcome==='connected' ? 'Notion connected. Load the shared pages and choose a destination. Live Claude processing still needs your preview access code.' : 'Notion connection cancelled.'); const clean=new URL(location.href); clean.searchParams.delete('notion'); history.replaceState(null,'',clean); }
   updateDestination(); updateButtons();
 }
 init();
@@ -172,13 +172,21 @@ $('disconnect-notion').addEventListener('click',async () => {
   catch(e) { message('input-message',e.message,true); }
 });
 async function loadPages(more=false) {
+  const button=more ? $('more-pages') : $('load-pages');
+  $('load-pages').disabled=$('more-pages').disabled=true;
+  const previous=button.textContent; button.textContent='Loading pages…';
+  message('connection-message','Loading pages shared with NotionFlow…');
   try {
     const result=await request('/api/notion/pages',more ? {cursor:pageCursor} : {});
     if(!more) { $('parent-page').replaceChildren(node('option','Choose a page')); $('parent-page').firstChild.value=''; }
     for(const page of result.pages) { const option=node('option',page.title); option.value=page.id; if(!Array.from($('parent-page').options).some(o => o.value===page.id)) $('parent-page').append(option); }
     pageCursor=result.cursor; $('more-pages').hidden=!pageCursor;
-    message('input-message',result.pages.length ? 'Choose a destination page.' : 'No shared pages found. Check access in Notion, wait briefly and load again.'); updateButtons();
-  } catch(e) { message('input-message',e.message,true); }
+    const count=$('parent-page').options.length-1;
+    $('parent-page').size=count ? Math.min(count+1,5) : 1;
+    $('confirm-publish').checked=false;
+    message('connection-message',count ? `${count} shared pages loaded. Select the page where you want to save your draft.` : 'No shared pages found. Share a page with NotionFlow in Notion, wait briefly and try again.'); updateButtons();
+  } catch(e) { message('connection-message',e.message,true); }
+  finally { button.textContent=previous; $('load-pages').disabled=$('more-pages').disabled=!connection.connected; }
 }
 $('load-pages').addEventListener('click',() => loadPages());
 $('more-pages').addEventListener('click',() => loadPages(true));

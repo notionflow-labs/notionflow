@@ -120,7 +120,9 @@ export default { async fetch(request, env = {}, fetcher = fetch) {
       else {
         if (!['/api/generate','/api/notion/read','/api/notion/publish','/api/notion/connect','/api/notion/disconnect','/api/notion/pages'].includes(path)) throw new HttpError(404,'Endpoint not found.');
         if (request.method !== 'POST') throw new HttpError(405,'Use POST.');
-        auth(request,env);
+        // The visitor's OAuth session authorizes their page listing and disconnect.
+        // Claude generation and content writes still require the preview access code.
+        if(!['/api/notion/pages','/api/notion/disconnect'].includes(path)) auth(request,env);
         if(path === '/api/notion/connect') return secure(await startConnection(request,env),request,env);
         if(path === '/api/notion/disconnect') return secure(await disconnect(request,env,fetcher),request,env);
         if (path === '/api/generate' && !liveReady(env)) throw new HttpError(503,'Live Claude access is not configured. Try the saved example.');
