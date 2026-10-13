@@ -49,7 +49,10 @@ export default {
     }
     const asset = await app.fetch(request, env);
     const result = new Response(asset.body, asset);
-    for (const [key, value] of Object.entries(headers)) result.headers.set(key, value);
+    for (const [key, value] of Object.entries(headers)) {
+      if (key === 'Referrer-Policy' && asset.headers.get('referrer-policy') === 'no-referrer') continue;
+      result.headers.set(key, value);
+    }
     return result;
   },
 };

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import worker, { sessionToken } from '../src/preview-worker.mjs';
+import { memorySessionStore } from '../src/local-session-store.mjs';
 const password = 'a-test-password-at-least-24-characters';
 const env = { PREVIEW_PASSWORD: password, ASSETS: { fetch: () => new Response('protected-site') } };
 const req = (path='/', options={}) => new Request('https://preview.example' + path, { ...options, headers: { 'User-Agent':'Mozilla/5.0', ...options.headers } });
@@ -50,4 +51,18 @@ test('Authenticated API POST reaches the app while anonymous API POST stays lock
   assert.equal(result.status,503);
   assert.match((await result.json()).error,/Live Claude access is not configured/);
   assert.match(result.headers.get('x-robots-tag'),/noindex/);
+});
+test('Private preview retains OAuth state cookies and does not expose callback parameters through referrers',async () => {
+  const configured={...env,DEMO_ACCESS_TOKEN:password,NOTION_OAUTH_CLIENT_ID:'client',NOTION_OAUTH_CLIENT_SECRET:'secret',NOTION_OAUTH_REDIRECT_URI:'https://preview.example/api/notion/callback',NOTION_SESSION_KEY:'a'.repeat(64),NOTION_SESSION_STORE:memorySessionStore()};
+  const preview='__Host-preview='+await sessionToken(password);
+  const start=await worker.fetch(req('/api/notion/connect',{method:'POST',headers:{Cookie:preview,Origin:'https://preview.example',Authorization:'Bearer '+password}}),configured);
+  assert.equal(start.status,200);
+  const state=new URL((await start.json()).url).searchParams.get('state');
+  const stateCookie=start.headers.getSetCookie()[0].split(';')[0];
+  const callback=await worker.fetch(req('/api/notion/callback?error=access_denied&state='+state,{headers:{Cookie:preview+'; '+stateCookie}}),configured);
+  assert.equal(callback.status,303);
+  assert.equal(callback.headers.get('referrer-policy'),'no-referrer');
+  assert.match(callback.headers.get('location'),/notion=cancelled/);
+  assert.match(callback.headers.getSetCookie()[0],/Max-Age=0/);
+  assert.match(callback.headers.get('x-robots-tag'),/noindex/);
 });
