@@ -1,0 +1,8 @@
+{
+  "name": "notionflow-preview",
+  "main": "src/worker.mjs",
+  "compatibility_date": "2026-10-11",
+  "assets": { "directory": "./public", "binding": "ASSETS", "run_worker_first": true },
+  "vars": { "SITE_DOMAIN": "notionflow.app", "CLAUDE_MODEL": "claude-sonnet-4-6", "LIVE_DEMO_ENABLED": "false", "LIVE_NOTION_ENABLED": "false" },
+  "routes": [], "workers_dev": true, "preview_urls": false
+}

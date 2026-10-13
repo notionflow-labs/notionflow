@@ -1,0 +1,63 @@
+{
+  "recordedAt": "2026-10-12T18:39:28.825636+00:00",
+  "kind": "meeting",
+  "source": "Launch review. Maya will deliver the homepage copy by October 16, 2026. Eli will test the contact form by October 23, 2026. We agreed to launch on November 6, 2026. The customer portal is excluded from this release.",
+  "result": {
+    "mode": "live",
+    "report": {
+      "title": "NotionFlow Workers live check \u00c2\u00b7 2026-10-12T18:39:28.825636+00:00",
+      "summary": "Team reviewed launch readiness. Key delivery dates were set for homepage copy and contact form testing. A launch date was confirmed, and the customer portal was explicitly scoped out of this release.",
+      "decisions": [
+        {
+          "text": "Launch date set for November 6, 2026.",
+          "evidence": "We agreed to launch on November 6, 2026."
+        },
+        {
+          "text": "Customer portal is excluded from this release.",
+          "evidence": "The customer portal is excluded from this release."
+        }
+      ],
+      "tasks": [
+        {
+          "title": "Deliver homepage copy",
+          "owner": "Maya",
+          "due": "2026-10-16",
+          "evidence": "Maya will deliver the homepage copy by October 16, 2026."
+        },
+        {
+          "title": "Test the contact form",
+          "owner": "Eli",
+          "due": "2026-10-23",
+          "evidence": "Eli will test the contact form by October 23, 2026."
+        }
+      ],
+      "questions": [
+        "Who is responsible for final launch approval?",
+        "Are there any other items scoped in or out of this release beyond what was mentioned?",
+        "What are the success criteria or go/no-go conditions for the November 6 launch?"
+      ]
+    },
+    "warnings": [],
+    "evidenceCheck": "text-match",
+    "model": "claude-sonnet-4-6",
+    "usage": {
+      "input_tokens": 671,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "cache_creation": {
+        "ephemeral_5m_input_tokens": 0,
+        "ephemeral_1h_input_tokens": 0
+      },
+      "output_tokens": 248,
+      "service_tier": "standard",
+      "inference_geo": "global"
+    }
+  },
+  "notionVerification": {
+    "pageCreated": true,
+    "tasksCreated": 2,
+    "pageReadBack": true,
+    "summaryAndTaskTitlesMatched": true
+  },
+  "note": "Recorded synthetic test. Private page IDs, links, request IDs and credentials omitted. Not a fresh API response."
+}
