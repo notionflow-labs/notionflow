@@ -138,6 +138,7 @@ async function init() {
   if(results[0].status==='fulfilled') { sample=results[0].value; $('source').value=sample.source; updateSize(); }
   else message('input-message','The saved example could not be loaded. Reload the page.',true);
   if(results[1].status==='fulfilled') available=results[1].value;
+  $('workspace').querySelector('option[value="sandbox"]').disabled=!available.notion;
   $('service-status').textContent=available.live ? 'Claude available · access code required' : 'Sample available · live processing unavailable';
   $('notion-status').textContent=available.notion ? 'This saves the draft in our demo workspace, where we can see it. Use sample or non-sensitive notes. Opening the result in Notion requires permission. To save your own draft, select Your document and enter your access code.' : 'Notion is not connected. You can still download the draft.';
   if(available.oauth) $('workspace').value='personal';

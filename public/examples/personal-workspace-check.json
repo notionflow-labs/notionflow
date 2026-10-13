@@ -1,0 +1,32 @@
+{
+  "recordedAt": "2026-10-13T16:34:02.780Z",
+  "environment": "Protected hosted preview",
+  "sourceType": "Synthetic meeting notes",
+  "workflow": [
+    "Notion OAuth authorization",
+    "Shared-page selection",
+    "Claude draft reviewed by operator",
+    "New page and action-items database published",
+    "Page and task rows read back through Notion API"
+  ],
+  "verification": {
+    "pageReadStatus": 200,
+    "launchDatePresent": true,
+    "taskCount": 2,
+    "owners": [
+      "Eli",
+      "Maya"
+    ],
+    "dueDates": [
+      "2026-10-16",
+      "2026-10-23"
+    ],
+    "allTaskEvidencePresent": true
+  },
+  "limits": [
+    "One test workflow, not a production reliability measurement.",
+    "Model usage and the raw OAuth callback are not included in this summary.",
+    "The text importer skips database blocks; task rows were verified separately."
+  ],
+  "privacy": "No tokens, workspace names, page IDs, account IDs or private preview URLs are included."
+}

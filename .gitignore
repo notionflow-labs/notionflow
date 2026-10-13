@@ -18,3 +18,6 @@ debug-deploy-receipt.json
 /scripts/deploy-debug.mjs
 /scripts/check-debug.py
 /wrangler.debug.jsonc
+
+# Private production binding configuration; domain activation requires approval.
+/wrangler.release.jsonc

@@ -2,11 +2,12 @@
 
 Turn meeting notes and project briefs into a draft you can review, edit and save in Notion.
 
-Claude extracts decisions, tasks and open questions. The editor shows source excerpts alongside tasks and decisions. You can correct owners and dates, download Markdown or JSON, or explicitly save the reviewed draft to a connected Notion sandbox.
+Claude extracts decisions, tasks and open questions. The editor shows source excerpts alongside tasks and decisions. You can correct owners and dates, download Markdown or JSON, or explicitly save the reviewed draft to a parent page in your connected Notion workspace.
 
 Preview access: contact@notionflow.app. Hosted preview URLs are not published in this repository.
 
-- [Recorded Claude-to-Notion check](examples/verified-run.json)
+- [Recorded sandbox check](examples/verified-run.json)
+- [Personal-workspace OAuth and readback check](examples/personal-workspace-check.json)
 
 ## Run locally
 
@@ -49,7 +50,7 @@ The server calls Claude's Messages API with a JSON schema. Text task/decision ex
 
 The app creates a new page, optionally with a task database containing owners, dates and excerpts. It does not overwrite the source. A result link requires Notion viewing permission; saving does not make the page public. Import is limited to 100 blocks, three levels and 30,000 characters, and reports skipped content.
 
-The hosted preview uses NotionFlow's shared sandbox, not a visitor's personal workspace. The operator can see saved content. Use non-sensitive test notes. Personal-workspace OAuth is implemented separately and needs a public Notion connection and session storage configured before it is enabled. Document history and batch processing are not implemented.
+The hosted preview offers two destinations: a visitor's OAuth-connected workspace and NotionFlow's shared sandbox. The operator can see content saved in the sandbox, so use non-sensitive test notes there. The visitor chooses which pages to share and which parent page to use in their own workspace. Document history and batch processing are not implemented.
 
 Notion API version: `2025-09-03`. Publishing is not idempotent across requests. If a timeout or partial database failure occurs, inspect the destination before retrying: a page may already exist.
 
@@ -59,11 +60,11 @@ Create a **public connection** in the Notion Developer portal with installation 
 
 Set `NOTION_OAUTH_CLIENT_ID`, `NOTION_OAUTH_CLIENT_SECRET` and `NOTION_SESSION_KEY` server-side. The session key is 32 random bytes as 64 lowercase hex characters. On Workers, bind a D1 database as `NOTION_DB` and apply `migrations/0001_notion_sessions.sql`. Keep account IDs, bindings for private deployments and secrets outside public source. Local development uses an in-memory store and loses connections when restarted.
 
-Select **My Notion workspace**, enter the preview access code, connect through Notion, then load shared pages and select a destination. Notion authorization only grants access to selected pages. New page grants may take time to appear in search. Import uses the selected connection; publishing validates access to the parent before creating a page. A missing or revoked personal connection never falls back to the demo sandbox.
+Select **My Notion workspace**, enter the preview access code, connect through Notion, then load shared pages and select a destination. Loading pages and disconnecting use the OAuth session without requiring the preview code again. Claude generation, importing page content and publishing still require the access code. Notion authorization only grants access to selected pages. New page grants may take time to appear in search. Import uses the selected connection; publishing validates access to the parent before creating a page. A missing or revoked personal connection never falls back to the demo sandbox.
 
 Tokens are encrypted with AES-GCM in server-side storage; browser cookies contain random identifiers. Authorization state is browser-bound and consumed atomically in D1. Sessions last up to 24 hours; expired credentials require reconnection rather than automatic token refresh. Expired storage records are deleted on the next connection attempt. Disconnect removes the local session and attempts provider revocation, with a warning if revocation fails. Drafts are not stored in the session database.
 
-The OAuth tests use simulated provider responses; a real public-connection login still requires operator configuration and verification. The existing recorded sandbox check is not evidence of a successful personal-workspace OAuth test.
+The OAuth tests use simulated provider responses; the hosted public connection has also been tested with a real OAuth login, page selection and publishing. `examples/personal-workspace-check.json` records the sanitized readback checks separately from the older sandbox test.
 
 ## How the code fits together
 
@@ -87,7 +88,7 @@ Browser editor -> Markdown / JSON download (no server call)
 
 A recorded hosted check used Claude Sonnet 4.6 to extract two tasks, saved the page and task database in Notion, and read the page back. `examples/verified-run.json` contains the synthetic input, returned draft, usage and a sanitized verification summary. It is a historical result, not a response generated from the current visitor's input.
 
-The protected preview has also been checked on desktop and mobile. JSON and Markdown downloads saved successfully in the reviewed browser environment. These checks do not establish production reliability or exhaustive model accuracy.
+A second hosted check completed the personal-workspace OAuth flow and saved a draft with two task rows. API readback verified owners, dates and source excerpts without exposing workspace identifiers. The protected preview has also been checked on desktop and mobile. Markdown and JSON export content was verified; a later automated browser download check was cancelled by the browser harness, so file saving was not reverified in that check. These checks do not establish production reliability or exhaustive model accuracy.
 
 ## Rights and contact
 

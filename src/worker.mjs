@@ -95,7 +95,7 @@ function secure(response, request, env) {
   if (url.hostname === `api.${env.SITE_DOMAIN || 'notionflow.app'}` && origin === appOrigin) { headers.set('access-control-allow-origin',origin); headers.set('access-control-allow-credentials','true'); headers.set('vary','Origin'); headers.set('access-control-allow-methods','GET, HEAD, POST, OPTIONS'); headers.set('access-control-allow-headers','content-type, authorization'); }
   headers.set('x-content-type-options','nosniff'); if(!headers.has('referrer-policy')) headers.set('referrer-policy','strict-origin-when-cross-origin'); headers.set('permissions-policy','camera=(), microphone=(), geolocation=()');
   headers.set('content-security-policy',`default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://api.${env.SITE_DOMAIN || 'notionflow.app'}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`);
-  if (url.hostname.endsWith('.workers.dev') || ['localhost','127.0.0.1'].includes(url.hostname)) headers.set('x-robots-tag','noindex, nofollow');
+  if (url.hostname.endsWith('.workers.dev') || ['localhost','127.0.0.1',`app.${env.SITE_DOMAIN || 'notionflow.app'}`,`api.${env.SITE_DOMAIN || 'notionflow.app'}`].includes(url.hostname)) headers.set('x-robots-tag','noindex, nofollow');
   return new Response(request.method === 'HEAD' ? null : response.body,{ status:response.status,headers });
 }
 export default { async fetch(request, env = {}, fetcher = fetch) {
@@ -149,10 +149,15 @@ export default { async fetch(request, env = {}, fetcher = fetch) {
         }
       }
     } else if (url.hostname === `api.${domain}`) response = json({ error:'Endpoint not found.' },404);
-    else if (path === '/robots.txt') response = new Response(`User-agent: *\nDisallow: /\n`,{ headers:{ 'content-type':'text/plain' } });
+    else if (path === '/robots.txt') {
+      const publicSite=env.PUBLIC_SITE_ENABLED==='true' && [domain,`www.${domain}`].includes(url.hostname);
+      response=new Response(publicSite ? `User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /app/\nSitemap: https://${domain}/sitemap.xml\n` : `User-agent: *\nDisallow: /\n`,{headers:{'content-type':'text/plain'}});
+    }
     else {
       if (!['GET','HEAD'].includes(request.method)) throw new HttpError(405,'Use GET or HEAD.');
-      if (url.hostname === `app.${domain}` && path === '/') { const asset = new URL(request.url); asset.pathname = '/app/'; response = await env.ASSETS.fetch(new Request(asset,request)); }
+      if(env.PUBLIC_SITE_ENABLED==='true' && url.hostname===`www.${domain}`) { const target=new URL(request.url); target.hostname=domain; response=Response.redirect(target,308); }
+      else if(env.PUBLIC_SITE_ENABLED==='true' && url.hostname===domain && (path==='/app' || path==='/app/' || path==='/app/index.html')) response=Response.redirect(`https://app.${domain}/${url.search}`,308);
+      else if (url.hostname === `app.${domain}` && path === '/') { const asset = new URL(request.url); asset.pathname = '/app/'; response = await env.ASSETS.fetch(new Request(asset,request)); }
       else response = await env.ASSETS.fetch(request);
     }
   } catch (e) { response = json({ error:e.status ? e.message : 'Unable to complete the request. Please try again.' },e.status || 500); }
