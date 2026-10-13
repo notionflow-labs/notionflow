@@ -3,6 +3,8 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import worker, { MAX_BODY } from './src/worker.mjs';
+import { memorySessionStore } from './src/local-session-store.mjs';
+const sessions=memorySessionStore();
 const root = fileURLToPath(new URL('./public/',import.meta.url));
 const types = { '.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.webmanifest':'application/manifest+json','.xml':'application/xml','.txt':'text/plain' };
 const assets = { async fetch(request) {
@@ -18,7 +20,9 @@ http.createServer(async (req,res) => {
     const chunks = []; let size = 0;
     for await (const chunk of req) { size += chunk.length; if (size > MAX_BODY) { res.writeHead(413); res.end('Document too large'); return; } chunks.push(chunk); }
     const request = new Request(`http://127.0.0.1:${port}${req.url}`,{ method:req.method,headers:req.headers,...(chunks.length ? { body:Buffer.concat(chunks) } : {}) });
-    const response = await worker.fetch(request,{ ...process.env,ASSETS:assets });
-    res.writeHead(response.status,Object.fromEntries(response.headers)); res.end(Buffer.from(await response.arrayBuffer()));
+    const response = await worker.fetch(request,{ ...process.env,ASSETS:assets,NOTION_SESSION_STORE:sessions });
+    const headers=Object.fromEntries(response.headers); delete headers['set-cookie'];
+    const cookies=response.headers.getSetCookie(); if(cookies.length) headers['set-cookie']=cookies;
+    res.writeHead(response.status,headers); res.end(Buffer.from(await response.arrayBuffer()));
   } catch { res.writeHead(500); res.end('Server error'); }
 }).listen(port,'127.0.0.1',() => console.log(`NotionFlow local preview: http://127.0.0.1:${port}`));

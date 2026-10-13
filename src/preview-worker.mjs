@@ -40,7 +40,8 @@ export default {
       if (!equal((new URLSearchParams(text).get('password') || '').trim(), env.PREVIEW_PASSWORD)) {
         return reply(login.replace('<form ', '<p role="alert">Incorrect password. Please try again.</p><form '), 401, { 'Content-Type': 'text/html; charset=utf-8' });
       }
-      return reply(null, 303, { Location: '/', 'Set-Cookie': `__Host-preview=${await sessionToken(env.PREVIEW_PASSWORD)}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=86400` });
+      // Lax permits Notion's top-level OAuth callback; login POST still requires the exact origin.
+      return reply(null, 303, { Location: '/', 'Set-Cookie': `__Host-preview=${await sessionToken(env.PREVIEW_PASSWORD)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=86400` });
     }
     const cookie = request.headers.get('Cookie')?.match(/(?:^|;\s*)__Host-preview=([a-f0-9]{64})(?:;|$)/)?.[1] || '';
     if (!equal(cookie, await sessionToken(env.PREVIEW_PASSWORD))) {

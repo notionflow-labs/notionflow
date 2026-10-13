@@ -26,7 +26,7 @@ test('Crawlers remain blocked with an authenticated cookie; robots disallows eve
 test('Same-origin login creates private secure cookie and authenticated assets retain noindex', async () => {
   const response = await worker.fetch(req('/__preview', { method:'POST', headers:{ Origin:'https://preview.example', 'Content-Type':'application/x-www-form-urlencoded' }, body:new URLSearchParams({ password }) }), env);
   assert.equal(response.status, 303);
-  assert.match(response.headers.get('set-cookie'), /HttpOnly; Secure; SameSite=Strict/);
+  assert.match(response.headers.get('set-cookie'), /HttpOnly; Secure; SameSite=Lax/);
   const cookie = response.headers.get('set-cookie').split(';')[0];
   const asset = await worker.fetch(req('/assets/index-DH4I4395.js', { headers:{ Cookie:cookie } }), env);
   assert.equal(await asset.text(), 'protected-site');

@@ -3,3 +3,5 @@
 @media(max-width:700px){.hero-workspace{min-height:680px}.transfer-note{display:none}.illustration-label{bottom:8px}.app-toolbar{flex-wrap:wrap}.mode-controls{flex-shrink:0}}
 
 .proof-section{padding:60px max(22px,8vw);border-top:1px solid #dbe2cf;background:#f1f5e9}.proof-section h2{font-size:clamp(28px,4vw,44px);margin:15px 0}.proof-section p{max-width:760px;line-height:1.7}.proof-section a{color:inherit;text-underline-offset:4px}.hero-actions{flex-wrap:wrap}
+
+.notion-connection{margin:1.25rem 0 2rem;padding:1rem;border:1px solid var(--line,#cedbd4);border-radius:8px}.notion-connection button{margin:.5rem .25rem .5rem 0}.notion-connection select{width:100%}.notion-connection p{font-size:.875rem;line-height:1.5}

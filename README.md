@@ -49,9 +49,21 @@ The server calls Claude's Messages API with a JSON schema. Text task/decision ex
 
 The app creates a new page, optionally with a task database containing owners, dates and excerpts. It does not overwrite the source. A result link requires Notion viewing permission; saving does not make the page public. Import is limited to 100 blocks, three levels and 30,000 characters, and reports skipped content.
 
-The hosted preview uses NotionFlow's shared sandbox, not a visitor's personal workspace. The operator can see saved content. Use non-sensitive test notes. Personal-workspace OAuth, document history and batch processing are not implemented.
+The hosted preview uses NotionFlow's shared sandbox, not a visitor's personal workspace. The operator can see saved content. Use non-sensitive test notes. Personal-workspace OAuth is implemented separately and needs a public Notion connection and session storage configured before it is enabled. Document history and batch processing are not implemented.
 
 Notion API version: `2025-09-03`. Publishing is not idempotent across requests. If a timeout or partial database failure occurs, inspect the destination before retrying: a page may already exist.
+
+## Connect a visitor’s own workspace
+
+Create a **public connection** in the Notion Developer portal with installation scope **Any workspace** and read/insert content capabilities. Follow Notion’s public-connection review requirements. Configure the exact API-host callback path `/api/notion/callback` in both Notion and `NOTION_OAUTH_REDIRECT_URI`; no preview hostname is published here.
+
+Set `NOTION_OAUTH_CLIENT_ID`, `NOTION_OAUTH_CLIENT_SECRET` and `NOTION_SESSION_KEY` server-side. The session key is 32 random bytes as 64 lowercase hex characters. On Workers, bind a D1 database as `NOTION_DB` and apply `migrations/0001_notion_sessions.sql`. Keep account IDs, bindings for private deployments and secrets outside public source. Local development uses an in-memory store and loses connections when restarted.
+
+Select **My Notion workspace**, enter the preview access code, connect through Notion, then load shared pages and select a destination. Notion authorization only grants access to selected pages. New page grants may take time to appear in search. Import uses the selected connection; publishing validates access to the parent before creating a page. A missing or revoked personal connection never falls back to the demo sandbox.
+
+Tokens are encrypted with AES-GCM in server-side storage; browser cookies contain random identifiers. Authorization state is browser-bound and consumed atomically in D1. Sessions last up to 24 hours; expired credentials require reconnection rather than automatic token refresh. Expired storage records are deleted on the next connection attempt. Disconnect removes the local session and attempts provider revocation, with a warning if revocation fails. Drafts are not stored in the session database.
+
+The OAuth tests use simulated provider responses; a real public-connection login still requires operator configuration and verification. The existing recorded sandbox check is not evidence of a successful personal-workspace OAuth test.
 
 ## How the code fits together
 
@@ -65,6 +77,8 @@ Browser editor -> Markdown / JSON download (no server call)
 - `public/`: website, guide, legal pages and editor.
 - `src/document.mjs`: output schema, excerpt checks, exports and Notion page payloads.
 - `src/worker.mjs`: authentication, request validation, Claude and Notion calls.
+- `src/notion-oauth.mjs`: browser-bound authorization, encrypted sessions and disconnection.
+- `migrations/`: D1 session schema.
 - `src/preview-worker.mjs`: password protection and crawler blocking for private previews.
 - `server.mjs`: local Node server using the same backend.
 - `test/`: mocked workflow and private-preview tests.

@@ -1,4 +1,5 @@
 import { HttpError, KINDS, SAMPLE_SOURCE, SAMPLE_REPORT, REPORT_SCHEMA, groundReport, validateReport, notionId, pagePayload } from './document.mjs';
+import { oauthReady, connectedSession, startConnection, finishConnection, disconnect } from './notion-oauth.mjs';
 export const MAX_BODY = 1500000;
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
 export const liveReady = env => env.LIVE_DEMO_ENABLED === 'true' && Boolean(env.ANTHROPIC_API_KEY && env.DEMO_ACCESS_TOKEN);
@@ -42,7 +43,7 @@ export async function generate(input, env, fetcher = fetch) {
 export async function notionCall(endpoint, method, payload, env, fetcher = fetch) {
   let response;
   try { response = await fetcher(`https://api.notion.com/v1${endpoint}`, { method, redirect: 'manual', signal: AbortSignal.timeout(20000), headers: { authorization: `Bearer ${env.NOTION_TOKEN}`, 'notion-version': '2025-09-03', 'content-type': 'application/json' }, ...(payload ? { body: JSON.stringify(payload) } : {}) }); } catch { throw new HttpError(502,'Notion could not be reached. Check the destination before retrying a publish.'); }
-  if (!response.ok) throw new HttpError(response.status === 429 ? 429 : 502, `Notion returned ${response.status}. Check integration access and the destination page.`);
+  if (!response.ok) throw new HttpError(response.status === 401 ? 401 : response.status === 429 ? 429 : 502, response.status === 401 ? 'Notion access expired or was revoked. Reconnect your workspace.' : `Notion returned ${response.status}. Check integration access and the destination page.`);
   return response.json();
 }
 export async function readNotion(page, env, fetcher = fetch) {
@@ -91,8 +92,8 @@ export async function publish(input, env, fetcher = fetch) {
 function secure(response, request, env) {
   const headers = new Headers(response.headers), url = new URL(request.url), origin = request.headers.get('origin');
   const appOrigin = `https://app.${env.SITE_DOMAIN || 'notionflow.app'}`;
-  if (url.hostname === `api.${env.SITE_DOMAIN || 'notionflow.app'}` && origin === appOrigin) { headers.set('access-control-allow-origin',origin); headers.set('vary','Origin'); headers.set('access-control-allow-methods','GET, HEAD, POST, OPTIONS'); headers.set('access-control-allow-headers','content-type, authorization'); }
-  headers.set('x-content-type-options','nosniff'); headers.set('referrer-policy','strict-origin-when-cross-origin'); headers.set('permissions-policy','camera=(), microphone=(), geolocation=()');
+  if (url.hostname === `api.${env.SITE_DOMAIN || 'notionflow.app'}` && origin === appOrigin) { headers.set('access-control-allow-origin',origin); headers.set('access-control-allow-credentials','true'); headers.set('vary','Origin'); headers.set('access-control-allow-methods','GET, HEAD, POST, OPTIONS'); headers.set('access-control-allow-headers','content-type, authorization'); }
+  headers.set('x-content-type-options','nosniff'); if(!headers.has('referrer-policy')) headers.set('referrer-policy','strict-origin-when-cross-origin'); headers.set('permissions-policy','camera=(), microphone=(), geolocation=()');
   headers.set('content-security-policy',`default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://api.${env.SITE_DOMAIN || 'notionflow.app'}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`);
   if (url.hostname.endsWith('.workers.dev') || ['localhost','127.0.0.1'].includes(url.hostname)) headers.set('x-robots-tag','noindex, nofollow');
   return new Response(request.method === 'HEAD' ? null : response.body,{ status:response.status,headers });
@@ -109,16 +110,41 @@ export default { async fetch(request, env = {}, fetcher = fetch) {
         const requested = (request.headers.get('access-control-request-headers') || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
         if (url.hostname !== `api.${domain}` || origin !== appOrigin || !['GET','HEAD','POST'].includes(request.headers.get('access-control-request-method')) || requested.some(h => !['content-type','authorization'].includes(h))) throw new HttpError(403,'Preflight not allowed.');
         response = new Response(null,{ status:204 });
-      } else if (path === '/api/status' && ['GET','HEAD'].includes(request.method)) response = json({ live:liveReady(env), notion:notionReady(env), model:env.CLAUDE_MODEL || 'claude-sonnet-4-6' });
+      } else if (path === '/api/status' && ['GET','HEAD'].includes(request.method)) response = json({ live:liveReady(env), notion:notionReady(env), oauth:oauthReady(env), model:env.CLAUDE_MODEL || 'claude-sonnet-4-6' });
       else if (path === '/api/sample' && ['GET','HEAD'].includes(request.method)) response = json({ mode:'sample', source:SAMPLE_SOURCE, report:SAMPLE_REPORT, warnings:[], evidenceCheck:'text-match' });
+      else if (path === '/api/notion/callback' && request.method === 'GET') response = await finishConnection(request,env,fetcher);
+      else if (path === '/api/notion/connection' && request.method === 'GET') {
+        try { const session=await connectedSession(request,env); response=json({connected:true,workspaceName:session.workspaceName}); }
+        catch(e) { if(![401,503].includes(e.status)) throw e; response=json({connected:false,available:oauthReady(env)}); }
+      }
       else {
-        if (!['/api/generate','/api/notion/read','/api/notion/publish'].includes(path)) throw new HttpError(404,'Endpoint not found.');
+        if (!['/api/generate','/api/notion/read','/api/notion/publish','/api/notion/connect','/api/notion/disconnect','/api/notion/pages'].includes(path)) throw new HttpError(404,'Endpoint not found.');
         if (request.method !== 'POST') throw new HttpError(405,'Use POST.');
         auth(request,env);
+        if(path === '/api/notion/connect') return secure(await startConnection(request,env),request,env);
+        if(path === '/api/notion/disconnect') return secure(await disconnect(request,env,fetcher),request,env);
         if (path === '/api/generate' && !liveReady(env)) throw new HttpError(503,'Live Claude access is not configured. Try the saved example.');
-        if (path.startsWith('/api/notion/') && !notionReady(env)) throw new HttpError(503,'Notion workspace access is not configured. Export Markdown or JSON instead.');
         const input = await body(request);
-        response = json(path === '/api/generate' ? await generate(input,env,fetcher) : path === '/api/notion/read' ? await readNotion(input.pageId,env,fetcher) : await publish(input,env,fetcher));
+        let destination=env;
+        if(path.startsWith('/api/notion/')) {
+          if(input.workspace === 'personal' || path === '/api/notion/pages') {
+            const session=await connectedSession(request,env);
+            destination={...env,NOTION_TOKEN:session.token,NOTION_PARENT_PAGE_ID:input.parentPageId};
+          } else {
+            if(input.workspace && input.workspace !== 'sandbox') throw new HttpError(400,'Choose your workspace or the sandbox.');
+            if(!notionReady(env)) throw new HttpError(503,'Notion sandbox is not configured.');
+          }
+        }
+        if(path === '/api/notion/pages') {
+          const result=await notionCall('/search','POST',{filter:{value:'page',property:'object'},page_size:50,...(input.cursor ? {start_cursor:String(input.cursor).slice(0,200)} : {})},destination,fetcher);
+          response=json({pages:(result.results || []).filter(p => !p.archived && !p.in_trash).map(p => ({id:p.id,title:Object.values(p.properties || {}).find(v => v.type==='title')?.title?.map(t => t.plain_text ?? t.text?.content ?? '').join('') || 'Untitled page'})),cursor:result.has_more ? result.next_cursor : null});
+        } else {
+          if(path === '/api/notion/publish' && input.workspace === 'personal') {
+            destination.NOTION_PARENT_PAGE_ID=notionId(input.parentPageId);
+            await notionCall(`/pages/${destination.NOTION_PARENT_PAGE_ID}`,'GET',null,destination,fetcher);
+          }
+          response = json(path === '/api/generate' ? await generate(input,env,fetcher) : path === '/api/notion/read' ? await readNotion(input.pageId,destination,fetcher) : await publish(input,destination,fetcher));
+        }
       }
     } else if (url.hostname === `api.${domain}`) response = json({ error:'Endpoint not found.' },404);
     else if (path === '/robots.txt') response = new Response(`User-agent: *\nDisallow: /\n`,{ headers:{ 'content-type':'text/plain' } });

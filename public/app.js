@@ -7,19 +7,22 @@ function message(id,text,error=false) { const el = $(id); el.hidden = !text; el.
 async function request(path,data) {
   const headers = {}; if (data) headers['content-type'] = 'application/json';
   if ($('access').value) headers.authorization = `Bearer ${$('access').value}`;
-  const response = await fetch(api+path,{ method:data ? 'POST':'GET',headers,...(data ? { body:JSON.stringify(data) }:{}),signal:AbortSignal.timeout(70000) });
+  const response = await fetch(api+path,{ method:data ? 'POST':'GET',headers,...(data ? { body:JSON.stringify(data) }:{}),credentials:'include',signal:AbortSignal.timeout(70000) });
   let result; try { result = await response.json(); } catch { throw new Error('The server returned an unreadable response.'); }
   if (!response.ok) throw new Error(result.error || `Request failed (${response.status}).`);
   return result;
 }
+let connection={connected:false}, pageCursor=null;
+const workspace=() => $('workspace').value;
+const destinationReady=() => workspace()==='personal' ? connection.connected && Boolean($('parent-page').value) : available.notion;
 function updateButtons() {
   $('generate').disabled = busy || (mode === 'live' && !available.live);
   $('generate').textContent = busy ? 'Working…' : mode === 'sample' ? 'Open saved draft ↗' : 'Create draft with Claude ↗';
   $('sample-mode').disabled = $('live-mode').disabled = $('kind').disabled = busy;
   $('source').readOnly = mode === 'sample' || Boolean(pdf) || busy;
   $('file').disabled = busy;
-  $('import-notion').disabled = busy || !available.notion;
-  $('publish').disabled = busy || !available.notion || mode !== 'live' || !$('confirm-publish').checked || published;
+  $('import-notion').disabled = busy || (workspace()==='personal' ? !connection.connected : !available.notion);
+  $('publish').disabled = busy || !destinationReady() || mode !== 'live' || !$('confirm-publish').checked || published;
   document.querySelectorAll('#report textarea, #report input, #report .secondary').forEach(el => { el.disabled = busy || (published && el.matches('textarea,input')); });
 }
 function node(tag,text,className) { const el = document.createElement(tag); if (text !== undefined) el.textContent = text; if (className) el.className = className; return el; }
@@ -114,14 +117,14 @@ $('generate').addEventListener('click',async () => {
 $('kind').addEventListener('change',() => { if(mode==='sample' && receipt) render(sampleView()); });
 $('import-notion').addEventListener('click',async () => {
   busy=true; updateButtons(); message('input-message','Reading the selected Notion page…');
-  try { const result=await request('/api/notion/read',{ pageId:$('notion-page').value.trim() }); pdf=null; $('file').value=''; $('file-info').textContent=''; $('source').value=result.text; updateSize(); message('input-message',`Imported ${result.title}.${result.truncated ? ' Some blocks were omitted or the read limit was reached. Review the imported text.' : ''}`); }
+  try { const result=await request('/api/notion/read',{ pageId:$('notion-page').value.trim(),workspace:workspace() }); pdf=null; $('file').value=''; $('file-info').textContent=''; $('source').value=result.text; updateSize(); message('input-message',`Imported ${result.title}.${result.truncated ? ' Some blocks were omitted or the read limit was reached. Review the imported text.' : ''}`); }
   catch(e) { message('input-message',e.message,true); } finally { busy=false; updateButtons(); }
 });
 $('confirm-publish').addEventListener('change',updateButtons);
 $('publish').addEventListener('click',async () => {
   try {
     const report=currentReport(); busy=true; updateButtons(); message('output-message','Creating a new page in the configured Notion destination…');
-    const result=await request('/api/notion/publish',{ report,confirm:$('confirm-publish').checked,createDatabase:$('create-db').checked });
+    const result=await request('/api/notion/publish',{ report,confirm:$('confirm-publish').checked,createDatabase:$('create-db').checked,workspace:workspace(),parentPageId:$('parent-page').value });
     published=true; message('output-message',result.warning || `Notion page created. ${result.tasksCreated} task database entries created.`);
     if(result.pageUrl && /^https:\/\/(?:(?:www|app)\.)?notion\.(?:so|com)\//.test(result.pageUrl)) { const a=node('a',' Open the page ↗'); a.href=result.pageUrl; a.target='_blank'; a.rel='noopener noreferrer'; $('output-message').append(a); }
   } catch(e) { message('output-message',`${e.message} Check the Notion destination before retrying; a page may have been created.`,true); }
@@ -137,6 +140,45 @@ async function init() {
   if(results[1].status==='fulfilled') available=results[1].value;
   $('service-status').textContent=available.live ? 'Claude available · access code required' : 'Sample available · live processing unavailable';
   $('notion-status').textContent=available.notion ? 'This saves the draft in our demo workspace, where we can see it. Use sample or non-sensitive notes. Opening the result in Notion requires permission. To save your own draft, select Your document and enter your access code.' : 'Notion is not connected. You can still download the draft.';
-  updateButtons();
+  if(available.oauth) $('workspace').value='personal';
+  try { await refreshConnection(); } catch { message('input-message','Could not check the Notion connection. Reload before publishing.',true); }
+  const outcome=new URL(location.href).searchParams.get('notion');
+  if(outcome) { message('input-message',outcome==='connected' ? 'Notion connected. Enter your access code and load the shared pages.' : 'Notion connection cancelled.'); const clean=new URL(location.href); clean.searchParams.delete('notion'); history.replaceState(null,'',clean); }
+  updateDestination(); updateButtons();
 }
 init();
+
+function updateDestination() {
+  $('personal-controls').hidden=workspace()!=='personal';
+  $('confirm-publish').checked=false;
+  $('notion-status').textContent=workspace()==='personal' ? 'Save a new page in your workspace. Select a parent page first. The source page is not overwritten.' : 'This saves in our demo sandbox, where NotionFlow can see the result. Use non-sensitive test notes.';
+  updateButtons();
+}
+async function refreshConnection() {
+  connection=await request('/api/notion/connection');
+  $('connection-status').textContent=connection.connected ? `Connected: ${connection.workspaceName}` : available.oauth ? 'Not connected.' : 'Personal connections are awaiting server configuration. The sandbox and file exports still work.';
+  $('connect-notion').disabled=!available.oauth;
+  $('disconnect-notion').hidden=!connection.connected;
+  $('load-pages').disabled=!connection.connected;
+}
+$('workspace').addEventListener('change',updateDestination);
+$('parent-page').addEventListener('change',() => { $('confirm-publish').checked=false; updateButtons(); });
+$('connect-notion').addEventListener('click',async () => {
+  try { const result=await request('/api/notion/connect',{}); const target=new URL(result.url); if(target.origin!=='https://api.notion.com') throw new Error('Invalid authorization destination.'); location.assign(target.href); }
+  catch(e) { message('input-message',e.message,true); }
+});
+$('disconnect-notion').addEventListener('click',async () => {
+  try { const result=await request('/api/notion/disconnect',{}); $('parent-page').replaceChildren(node('option','Choose a page')); $('parent-page').firstChild.value=''; pageCursor=null; $('more-pages').hidden=true; await refreshConnection(); updateDestination(); message('input-message',result.warning || 'Notion disconnected. Existing pages stay in Notion.'); }
+  catch(e) { message('input-message',e.message,true); }
+});
+async function loadPages(more=false) {
+  try {
+    const result=await request('/api/notion/pages',more ? {cursor:pageCursor} : {});
+    if(!more) { $('parent-page').replaceChildren(node('option','Choose a page')); $('parent-page').firstChild.value=''; }
+    for(const page of result.pages) { const option=node('option',page.title); option.value=page.id; if(!Array.from($('parent-page').options).some(o => o.value===page.id)) $('parent-page').append(option); }
+    pageCursor=result.cursor; $('more-pages').hidden=!pageCursor;
+    message('input-message',result.pages.length ? 'Choose a destination page.' : 'No shared pages found. Check access in Notion, wait briefly and load again.'); updateButtons();
+  } catch(e) { message('input-message',e.message,true); }
+}
+$('load-pages').addEventListener('click',() => loadPages());
+$('more-pages').addEventListener('click',() => loadPages(true));

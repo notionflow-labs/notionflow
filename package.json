@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "node --env-file-if-exists=.env server.mjs",
-    "check": "node --check server.mjs && node --check src/worker.mjs && node --check src/document.mjs && node --check public/app.js && node --check public/site.js",
+    "check": "node --check server.mjs && node --check src/notion-oauth.mjs && node --check src/worker.mjs && node --check src/document.mjs && node --check public/app.js && node --check public/site.js",
     "test": "node --test test/*.test.mjs",
     "assets": "node scripts/brand-assets.mjs"
   },
